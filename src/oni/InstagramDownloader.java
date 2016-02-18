@@ -192,7 +192,7 @@ public class InstagramDownloader {
         return HTMLContent;
     }
 
-    private static String humanReadableByteCount(long bytes, boolean si) {
+    private String humanReadableByteCount(long bytes, boolean si) {
         int unit = si ? 1000 : 1024;
         if (bytes < unit) return bytes + " B";
         int exp = (int) (Math.log(bytes) / Math.log(unit));
