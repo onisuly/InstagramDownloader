@@ -5,10 +5,6 @@ import org.apache.commons.cli.*;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 
-/**
- * Created by onisuly on 2/12/16.
- * Instagram Downloader
- */
 public class ConsoleDownloader {
 
     private static InstagramDownloader downloader = new InstagramDownloader();
@@ -72,7 +68,7 @@ public class ConsoleDownloader {
 
         try {
             CommandLine cli = parser.parse(options, args);
-            long limit = 0;
+            int limit = 0;
             Proxy proxy = Proxy.NO_PROXY;
             boolean isUpdate = false;
 
@@ -82,7 +78,7 @@ public class ConsoleDownloader {
 
             if ( cli.hasOption("m") ) {
                 try {
-                    limit = Long.parseLong( cli.getOptionValue("m") );
+                    limit = Integer.parseInt( cli.getOptionValue("m") );
                     if ( limit <= 0 ) {
                         System.out.println("Invalid arg: " + cli.getOptionValue("m"));
                         System.exit(1);
