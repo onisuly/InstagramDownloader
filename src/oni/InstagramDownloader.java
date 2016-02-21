@@ -33,6 +33,10 @@ public class InstagramDownloader {
         }
 
         InstagramMedia media = parseOneResource(code, proxy);
+        if ( media == null ) {
+            System.out.println("Something goes wrong!");
+            return;
+        }
 
         String extension = media.getDisplay_src().split("\\?ig_cache_key")[0];
         extension = extension.substring( extension.lastIndexOf(".") );
@@ -124,7 +128,7 @@ public class InstagramDownloader {
                     }
                 }
 
-                medias[addMediaPoint] =  InstagramMedia.build(code, date, width, height, is_video, display_src);
+                medias[addMediaPoint] =  new InstagramMedia(code, date, width, height, is_video, display_src);
             }
 
             user = readUserJson(username, end_cursor, proxy);
@@ -189,7 +193,7 @@ public class InstagramDownloader {
             boolean is_video = PostPage.getJSONObject("media").getBoolean("is_video");
             String display_src = is_video ? PostPage.getJSONObject("media").getString("video_url") :
                     PostPage.getJSONObject("media").getString("display_src");
-            media = InstagramMedia.build(code, date, width, height, is_video, display_src);
+            media = new InstagramMedia(code, date, width, height, is_video, display_src);
         }
         return media;
     }
