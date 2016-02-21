@@ -10,7 +10,7 @@ class InstagramMedia {
 
     public InstagramMedia(){}
 
-    private InstagramMedia(String code, int date, int width, int height, boolean is_video, String display_src)
+    public InstagramMedia(String code, int date, int width, int height, boolean is_video, String display_src)
     {
         this.code = code;
         this.date = date;
@@ -18,12 +18,6 @@ class InstagramMedia {
         this.height = height;
         this.is_video = is_video;
         this.display_src = display_src;
-    }
-
-    public static InstagramMedia build( String code, int date, int width, int height, boolean is_video,
-                                        String display_src )
-    {
-        return new InstagramMedia(code, date, width, height, is_video, display_src);
     }
 
     public String getCode() {
