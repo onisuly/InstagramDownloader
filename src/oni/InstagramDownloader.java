@@ -55,7 +55,7 @@ public class InstagramDownloader {
         String end_cursor = "";
 
         int mediaPoint = 1;
-        int mediaCount = 0;
+        int mediaCount;
         long downloadedSize = 0;
 
         File dir = new File( username );
@@ -78,16 +78,7 @@ public class InstagramDownloader {
             return;
         }
 
-        if ( limit > 0 ) {
-            System.out.printf("Downloading: %s\nTotal: %d item(s), %d item(s) limited\n", username, mediaCount, limit);
-            mediaCount = Integer.min(mediaCount, limit);
-        }
-        else if ( isUpdate ) {
-            System.out.printf("Updating: %s\n", username);
-        }
-        else {
-            System.out.printf("Downloading: %s\nTotal: %d item(s)\n", username, mediaCount);
-        }
+        if ( limit > 0 ) mediaCount = Integer.min(mediaCount, limit);
 
         InstagramMedia[] medias = new InstagramMedia[mediaCount];
 
@@ -133,6 +124,8 @@ public class InstagramDownloader {
 
             user = readUserJson(username, end_cursor, proxy);
         } while ( has_next_page );
+
+        System.out.printf("Downloading: %s\nTotal: %d item(s)\n", username, mediaCount);
 
         for ( int i = 0; i < mediaCount; ++i ) {
             String code = medias[i].getCode();
