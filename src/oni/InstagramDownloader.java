@@ -10,140 +10,188 @@ import java.net.URLConnection;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Created by onisuly on 2/10/16.
- * Instagram Downloader
- * JDK 8
- */
 public class InstagramDownloader {
 
-    private long point = 1;
-    private long count = 0;
-    private long size = 0;
-
     public void parseURL(String url, Proxy proxy) {
-        String HTMLContent = readContent(url, proxy);
-        Matcher matcher1 = Pattern
-                .compile("<meta property=\"og:video:secure_url\" content=\"(.+?)\" />")
-                .matcher( HTMLContent );
-        Matcher matcher2 = Pattern
-                .compile("<meta property=\"og:image\" content=\"(.+?)\" />")
-                .matcher( HTMLContent );
-        String mediaAddress = null;
-        if ( matcher1.find() ) {
-            mediaAddress = matcher1.group(1);
-        }
-        else if ( matcher2.find() ) {
-            mediaAddress = matcher2.group(1);
-        }
 
-        if ( mediaAddress == null ) {
-            System.out.println( "Parse media failed!" );
+        Pattern pattern = Pattern.compile("www.instagram.com/p/([0-9a-zA-Z]+?)/");
+        Matcher matcher = pattern.matcher(url);
+
+        String code;
+        if ( matcher.find() ) {
+            code = matcher.group(1);
         }
         else {
-            String fileName = mediaAddress.split("\\?ig_cache_key")[0];
-            fileName = UUID.randomUUID() + fileName.substring( fileName.lastIndexOf(".") );
-            File outFile = new File(fileName);
-            downloadToFile( mediaAddress, outFile, proxy );
-            System.out.println( "Completed!" );
+            System.out.println("Invalid Url: " + url);
+            return;
         }
+
+        InstagramMedia media = parseOneResource(code, proxy);
+        if ( media == null ) {
+            System.out.println("Something goes wrong!");
+            return;
+        }
+
+        String extension = media.getDisplay_src().split("\\?ig_cache_key")[0];
+        extension = extension.substring( extension.lastIndexOf(".") );
+        int date = media.getDate();
+        LocalDateTime localDateTime = LocalDateTime.ofEpochSecond(date, 0, ZoneOffset.UTC);
+        String formattedDate = localDateTime.format( DateTimeFormatter.ofPattern("yyyyMMddhhmmss") );
+        String fileName = formattedDate + extension;
+
+        File outFile = new File( fileName );
+        downloadFile( media.getDisplay_src(), outFile, proxy );
+        System.out.println( "Completed!" );
     }
 
-    public void parseUser(String username, Proxy proxy, long limit) {
+    public void parseUser(String username, Proxy proxy, int limit, boolean isUpdate) {
         boolean has_next_page;
         String end_cursor = "";
-        point = 1;
-        count = 0;
-        size = 0;
 
-        outer:
+        int mediaPoint = 1;
+        int mediaCount;
+        long downloadedSize = 0;
+
+        File dir = new File( username );
+        if ( ( !dir.exists() && !dir.mkdir() ) || ( dir.exists() && dir.isFile() ) )
+        {
+            System.out.println( "Cannot create directory: " + dir.getAbsolutePath() );
+            return;
+        }
+
+        JSONObject user = readUserJson(username, end_cursor, proxy);
+        if ( user == null ) {
+            System.out.println("Something goes wrong!");
+            return;
+        }
+
+        mediaCount = user.getJSONObject("media").getInt("count");
+
+        if ( mediaCount == 0  ) {
+            System.out.println( "No media found!" );
+            return;
+        }
+
+        if ( limit > 0 ) mediaCount = Integer.min(mediaCount, limit);
+
+        InstagramMedia[] medias = new InstagramMedia[mediaCount];
+
+        int addMediaPoint = 0;
         do {
-            String HTMLContent = readContent("https://www.instagram.com/" + username + "/?max_id=" + end_cursor, proxy);
-            Pattern pattern = Pattern.compile("<script type=\"text/javascript\">window._sharedData = (.+)?;</script>");
-            Matcher matcher = pattern.matcher( HTMLContent );
-            Optional<String> json = Optional.empty();
-            if ( matcher.find() ) {
-                json = Optional.of( matcher.group(1) );
-            }
-
-            File dir = new File( username );
-            if ( !json.isPresent() || ( end_cursor.equals("") && !dir.mkdir() ) ) {
-                System.out.println("Something goes wrong!");
-                System.exit(1);
-            }
-
-            JSONObject jsonObject = new JSONObject( json.get() );
-            JSONObject user = jsonObject.getJSONObject("entry_data").getJSONArray("ProfilePage").getJSONObject(0)
-                    .getJSONObject("user");
-
-            count = user.getJSONObject("media").getLong("count");
-            if ( count == 0  ) {
-                System.out.println( "No media found!" );
-                System.exit(0);
-            }
-            count = limit > 0 ? Math.min(limit, count) : count;
-
-            if ( end_cursor.equals("") ) {
-                System.out.println("Downloading: " + username + "\n" + "Total: " + count + " item(s)");
-            }
-
             JSONArray nodes = user.getJSONObject("media").getJSONArray("nodes");
             JSONObject page_info = user.getJSONObject("media").getJSONObject("page_info");
             has_next_page = page_info.getBoolean("has_next_page");
             end_cursor = page_info.getString("end_cursor");
 
-            for ( int i = 0; i < nodes.length(); ++i ) {
-                if ( point > count ) break outer;
+            for ( int i = 0; i < nodes.length() && addMediaPoint < mediaCount; ++i, ++addMediaPoint ) {
                 JSONObject node = nodes.getJSONObject(i);
+
                 String code = node.getString("code");
-                LocalDateTime localDateTime = LocalDateTime.ofEpochSecond(node.getInt("date"), 0, ZoneOffset.UTC);
-                String date = localDateTime.format( DateTimeFormatter.ofPattern("yyyyMMddhhmmss") );
+                int date = node.getInt("date");
+                int width = node.getJSONObject("dimensions").getInt("width");
+                int height = node.getJSONObject("dimensions").getInt("height");
                 boolean is_video = node.getBoolean("is_video");
+                String display_src = node.getString("display_src");
 
-                if ( is_video ) {
-                    new Thread( () -> {
-                        String videoContent = readContent("https://www.instagram.com/p/" + code, proxy);
-                        Matcher videoMatcher = pattern.matcher( videoContent );
-                        if ( videoMatcher.find() ) {
-                            String videoJson = videoMatcher.group(1);
-                            JSONObject videoObject = new JSONObject(videoJson);
-                            String video_url = videoObject.getJSONObject("entry_data").getJSONArray("PostPage")
-                                    .getJSONObject(0).getJSONObject("media").getString("video_url");
-                            new Thread( () -> downloadMedia(video_url, dir, date, proxy) ).run();
-                        }
-                    }).run();
+                if (  isUpdate ) {
+                    File userDir = new File( username );
+                    String lastUpdateTime  = null;
+                    if ( userDir.exists() ) {
+                        List<String> list = Arrays.asList( userDir.list() );
+                        lastUpdateTime = list.stream()
+                                .map( s -> s.substring(0, 14) )
+                                .filter( s -> s.matches("^[0-9]{14}$") )
+                                .sorted( Comparator.reverseOrder() )
+                                .findFirst()
+                                .orElseGet(() -> null);
+                    }
+                    LocalDateTime localDateTime = LocalDateTime.ofEpochSecond(date, 0, ZoneOffset.UTC);
+                    String strDate = localDateTime.format( DateTimeFormatter.ofPattern("yyyyMMddhhmmss") );
+                    if ( lastUpdateTime != null && strDate.compareTo(lastUpdateTime) <= 0 ) {
+                        mediaCount = addMediaPoint;
+                        break;
+                    }
                 }
-                else {
-                    String display_src = node.getString("display_src");
-                    new Thread( () -> downloadMedia(display_src, dir, date, proxy) ).run();
-                }
+
+                medias[addMediaPoint] =  new InstagramMedia(code, date, width, height, is_video, display_src);
             }
+
+            user = readUserJson(username, end_cursor, proxy);
         } while ( has_next_page );
+
+        System.out.printf("Downloading: %s\nTotal: %d item(s)\n", username, mediaCount);
+
+        for ( int i = 0; i < mediaCount; ++i ) {
+            String code = medias[i].getCode();
+            int date = medias[i].getDate();
+            boolean is_video = medias[i].is_video();
+            String display_src = is_video ? parseOneResource(code, proxy).getDisplay_src() : medias[i].getDisplay_src();
+
+            String fileName = display_src.split("\\?ig_cache_key")[0];
+
+            LocalDateTime localDateTime = LocalDateTime.ofEpochSecond(date, 0, ZoneOffset.UTC);
+            String caption = localDateTime.format( DateTimeFormatter.ofPattern("yyyyMMddhhmmss") );
+            fileName = caption + fileName.substring( fileName.lastIndexOf(".") );
+
+            File outFile = new File(dir.getAbsolutePath() + File.separator + fileName);
+
+            long fileSize = downloadFile(display_src, outFile, proxy);
+            downloadedSize += fileSize;
+
+            //Clear entire line, reference: http://www.climagic.org/mirrors/VT100_Escape_Codes.html
+            System.out.printf("%c[2K", 27);
+
+            System.out.printf("\r%.2f%% Completed, %s Total Downloaded!", 100.0 * mediaPoint++ / mediaCount,
+                    humanReadableByteCount(downloadedSize, true));
+
+            if ( mediaPoint > mediaCount ) System.out.print("\n");
+        }
     }
 
-    private void downloadMedia(String address, File dir, String caption, Proxy proxy ) {
-        String fileName = address.split("\\?ig_cache_key")[0];
-        fileName = caption + fileName.substring( fileName.lastIndexOf(".") );
-        File outFile = new File(dir.getAbsolutePath() + File.separator + fileName);
+    private JSONObject readUserJson(String username, String end_cursor, Proxy proxy) {
+        String HTMLContent = readContent("https://www.instagram.com/" + username + "/?max_id=" + end_cursor, proxy);
+        Pattern pattern = Pattern.compile("<script type=\"text/javascript\">window._sharedData = (.+)?;</script>");
+        Matcher matcher = pattern.matcher( HTMLContent );
 
-        long fileSize = downloadToFile(address, outFile, proxy);
-        size += fileSize;
-
-        //Clear entire line, reference: http://www.climagic.org/mirrors/VT100_Escape_Codes.html
-        System.out.printf("%c[2K", 27);
-
-        System.out.printf("\r%.2f%% Completed, %s Total Downloaded!", 100.0 * point++ / count,
-                humanReadableByteCount(size, true));
-
-        if ( point > count ) System.out.print("\n\n");
+        JSONObject user = null;
+        if ( matcher.find() ) {
+            String jsonContent = matcher.group(1);
+            JSONObject jsonObject = new JSONObject( jsonContent );
+            user = jsonObject.getJSONObject("entry_data").getJSONArray("ProfilePage").getJSONObject(0)
+                    .getJSONObject("user");
+        }
+        return user;
     }
 
-    private long downloadToFile( String address, File outFile, Proxy proxy ) {
+    private InstagramMedia parseOneResource( String code, Proxy proxy ) {
+        InstagramMedia media = null;
+        String mediaContent = readContent("https://www.instagram.com/p/" + code, proxy);
+        Pattern pattern = Pattern.compile(
+                "<script type=\"text/javascript\">window._sharedData = (.+)?;</script>"
+        );
+        Matcher mediaMatcher = pattern.matcher( mediaContent );
+        if ( mediaMatcher.find() ) {
+            String mediaJson = mediaMatcher.group(1);
+            JSONObject videoObject = new JSONObject(mediaJson);
+            JSONObject PostPage =  videoObject.getJSONObject("entry_data").getJSONArray("PostPage").getJSONObject(0);
+            int date = PostPage.getJSONObject("media").getInt("date");
+            int width = PostPage.getJSONObject("media").getJSONObject("dimensions").getInt("width");
+            int height = PostPage.getJSONObject("media").getJSONObject("dimensions").getInt("height");
+            boolean is_video = PostPage.getJSONObject("media").getBoolean("is_video");
+            String display_src = is_video ? PostPage.getJSONObject("media").getString("video_url") :
+                    PostPage.getJSONObject("media").getString("display_src");
+            media = new InstagramMedia(code, date, width, height, is_video, display_src);
+        }
+        return media;
+    }
+
+    private long downloadFile(String address, File outFile, Proxy proxy ) {
         long fileSize = 0;
         try {
             URLConnection connection = new URL(address).openConnection(proxy);

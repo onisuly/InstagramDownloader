@@ -5,10 +5,6 @@ import org.apache.commons.cli.*;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 
-/**
- * Created by onisuly on 2/12/16.
- * Instagram Downloader
- */
 public class ConsoleDownloader {
 
     private static InstagramDownloader downloader = new InstagramDownloader();
@@ -49,6 +45,11 @@ public class ConsoleDownloader {
                 .argName("limit")
                 .build();
 
+        final Option updateOption = Option.builder("p")
+                .longOpt("update")
+                .desc("Update specified user's media")
+                .build();
+
         OptionGroup inputGroup = new OptionGroup();
         inputGroup.setRequired(true);
         inputGroup
@@ -59,15 +60,17 @@ public class ConsoleDownloader {
                 .addOptionGroup(inputGroup)
                 .addOption(limitOption)
                 .addOption(proxyOption)
-                .addOption(helpOption);
+                .addOption(helpOption)
+                .addOption(updateOption);
 
         CommandLineParser parser = new DefaultParser();
         HelpFormatter helpFormatter = new HelpFormatter();
 
         try {
             CommandLine cli = parser.parse(options, args);
-            long limit = 0;
+            int limit = 0;
             Proxy proxy = Proxy.NO_PROXY;
+            boolean isUpdate = false;
 
             if ( cli.hasOption("h") ) {
                 helpFormatter.printHelp(downloader.getClass().getSimpleName(), options);
@@ -75,7 +78,7 @@ public class ConsoleDownloader {
 
             if ( cli.hasOption("m") ) {
                 try {
-                    limit = Long.parseLong( cli.getOptionValue("m") );
+                    limit = Integer.parseInt( cli.getOptionValue("m") );
                     if ( limit <= 0 ) {
                         System.out.println("Invalid arg: " + cli.getOptionValue("m"));
                         System.exit(1);
@@ -100,8 +103,12 @@ public class ConsoleDownloader {
                 }
             }
 
+            if ( cli.hasOption("p") ) {
+                isUpdate = true;
+            }
+
             if ( cli.hasOption("u") ) {
-                downloader.parseUser( cli.getOptionValue("u"), proxy, limit );
+                downloader.parseUser( cli.getOptionValue("u"), proxy, limit, isUpdate );
             }
             else if ( cli.hasOption("a") ) {
                 downloader.parseURL(cli.getOptionValue("a"), proxy);
