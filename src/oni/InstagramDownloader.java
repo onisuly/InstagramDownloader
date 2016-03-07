@@ -20,7 +20,7 @@ public class InstagramDownloader {
 
     public void parseURL(String url, Proxy proxy) {
 
-        Pattern pattern = Pattern.compile("www.instagram.com/p/([^/]+?)/");
+        Pattern pattern = Pattern.compile("www.instagram.com/p/([^/]+)");
         Matcher matcher = pattern.matcher(url);
 
         String code;
