@@ -20,7 +20,7 @@ public class InstagramDownloader {
 
     public void parseURL(String url, Proxy proxy) {
 
-        Pattern pattern = Pattern.compile("www.instagram.com/p/([0-9a-zA-Z]+?)/");
+        Pattern pattern = Pattern.compile("www.instagram.com/p/([^/]+)");
         Matcher matcher = pattern.matcher(url);
 
         String code;
@@ -83,13 +83,17 @@ public class InstagramDownloader {
         InstagramMedia[] medias = new InstagramMedia[mediaCount];
 
         int addMediaPoint = 0;
+        int loopCount = 0;
+        outer:
         do {
+            System.out.print("\033[2K"); //Erase line content
+            System.out.print( "\rParsing" + "...".substring(0, loopCount++ % 3 + 1) );
             JSONArray nodes = user.getJSONObject("media").getJSONArray("nodes");
             JSONObject page_info = user.getJSONObject("media").getJSONObject("page_info");
             has_next_page = page_info.getBoolean("has_next_page");
             end_cursor = page_info.getString("end_cursor");
 
-            for ( int i = 0; i < nodes.length() && addMediaPoint < mediaCount; ++i, ++addMediaPoint ) {
+            for ( int i = 0; i < nodes.length(); ++i ) {
                 JSONObject node = nodes.getJSONObject(i);
 
                 String code = node.getString("code");
@@ -99,7 +103,7 @@ public class InstagramDownloader {
                 boolean is_video = node.getBoolean("is_video");
                 String display_src = node.getString("display_src");
 
-                if (  isUpdate ) {
+                if ( isUpdate ) {
                     File userDir = new File( username );
                     String lastUpdateTime  = null;
                     if ( userDir.exists() ) {
@@ -115,16 +119,19 @@ public class InstagramDownloader {
                     String strDate = localDateTime.format( DateTimeFormatter.ofPattern("yyyyMMddhhmmss") );
                     if ( lastUpdateTime != null && strDate.compareTo(lastUpdateTime) <= 0 ) {
                         mediaCount = addMediaPoint;
-                        break;
+                        break outer;
                     }
                 }
 
-                medias[addMediaPoint] =  new InstagramMedia(code, date, width, height, is_video, display_src);
+                medias[addMediaPoint++] =  new InstagramMedia(code, date, width, height, is_video, display_src);
+                if ( addMediaPoint >= mediaCount ) break outer;
             }
 
             user = readUserJson(username, end_cursor, proxy);
         } while ( has_next_page );
 
+        System.out.print("\033[2K"); //Erase line content
+        System.out.println( "\rParse completed!" );
         System.out.printf("Downloading: %s\nTotal: %d item(s)\n", username, mediaCount);
 
         for ( int i = 0; i < mediaCount; ++i ) {
@@ -144,9 +151,7 @@ public class InstagramDownloader {
             long fileSize = downloadFile(display_src, outFile, proxy);
             downloadedSize += fileSize;
 
-            //Clear entire line, reference: http://www.climagic.org/mirrors/VT100_Escape_Codes.html
-            System.out.printf("%c[2K", 27);
-
+            System.out.print("\033[2K"); //Erase line content
             System.out.printf("\r%.2f%% Completed, %s Total Downloaded!", 100.0 * mediaPoint++ / mediaCount,
                     humanReadableByteCount(downloadedSize, true));
 
